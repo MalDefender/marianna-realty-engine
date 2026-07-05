@@ -1,0 +1,22 @@
+# Render Blueprint — подключи репозиторий в Render и он подхватит эти настройки.
+# Базу Postgres создай отдельно (Neon бесплатно) и впиши DATABASE_URL в Environment.
+services:
+  - type: web
+    name: marianna-realty
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: AUTH_SECRET
+        generateValue: true      # Render сгенерирует случайный секрет
+      - key: DATABASE_URL
+        sync: false              # впиши строку подключения Neon вручную
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: NEXT_PUBLIC_CONTACT_URL
+        value: https://www.instagram.com/marianna_realty/
