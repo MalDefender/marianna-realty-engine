@@ -8,6 +8,13 @@ import { readJsonLimited } from "@/lib/http";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// A VALID 60-char cost-12 bcrypt hash (of a throwaway string). Used when the
+// username doesn't exist so the compare performs the same key-derivation work
+// as a real login (~260ms) — a malformed hash short-circuits in ~0ms and leaks,
+// via response timing, whether a username exists. Must stay at cost 12 to match
+// real admin hashes (see scripts/seed.mjs).
+const DUMMY_HASH = "$2a$12$wh8bSCT2Dq0Mp3aOcBs.GeDoBzgbVFx2ZWluKjqIlPE5nvRHtOuqS";
+
 export async function POST(req: Request) {
   try {
     assertSameOrigin(req);
@@ -28,8 +35,9 @@ export async function POST(req: Request) {
     }
 
     const admin = await getAdminByUsername(parsed.data.username);
-    // Always run a compare to reduce username-enumeration timing signal.
-    const hash = admin?.password_hash ?? "$2a$12$0000000000000000000000000000000000000000000000000000";
+    // Always run a real bcrypt compare (even for unknown users) to equalize
+    // timing and prevent username enumeration.
+    const hash = admin?.password_hash ?? DUMMY_HASH;
     const ok = await verifyPassword(parsed.data.password, hash);
 
     if (!admin || !ok) {
