@@ -126,16 +126,45 @@ const SEED_LISTINGS: ListingInput[] = (
  * per process (called from the memoized initDb). Safe to leave in place — it
  * no-ops once an admin exists.
  */
+async function setAdminPassword(username: string, hash: string): Promise<void> {
+  if (usePg) {
+    const p = await pool();
+    await p.query("UPDATE admins SET password_hash = $2 WHERE username = $1", [username, hash]);
+    return;
+  }
+  const db = await readJson();
+  const a = db.admins.find((x) => x.username === username);
+  if (a) { a.password_hash = hash; await writeJson(db); }
+}
+
+async function pruneAdmins(keepUsername: string): Promise<void> {
+  if (usePg) {
+    const p = await pool();
+    await p.query("DELETE FROM admins WHERE username <> $1", [keepUsername]);
+    return;
+  }
+  const db = await readJson();
+  const before = db.admins.length;
+  db.admins = db.admins.filter((a) => a.username === keepUsername);
+  if (db.admins.length < before) await writeJson(db);
+}
+
 async function ensureSeed(): Promise<void> {
   try {
     const user = process.env.ADMIN_USERNAME;
     const pass = process.env.ADMIN_PASSWORD;
     if (user && pass && pass.length >= 8) {
+      // Env is the single source of truth for the admin.
       const existing = await getAdminByUsername(user);
-      const count = await countAdmins();
-      if (!existing && count === 0) {
+      if (!existing) {
         await createAdmin(user, await bcrypt.hash(pass, 12));
+      } else {
+        // Sync password if it no longer matches what's in the environment.
+        const matches = await bcrypt.compare(pass, existing.password_hash);
+        if (!matches) await setAdminPassword(user, await bcrypt.hash(pass, 12));
       }
+      // Keep exactly one admin — remove any stale accounts (e.g. old username).
+      await pruneAdmins(user);
     }
     const listings = await listListings();
     if (listings.length === 0) {
