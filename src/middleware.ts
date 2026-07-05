@@ -36,7 +36,7 @@ export async function middleware(req: NextRequest) {
   let valid = false;
   if (token && secret && secret.length >= 16) {
     try {
-      await jwtVerify(token, new TextEncoder().encode(secret));
+      await jwtVerify(token, new TextEncoder().encode(secret), { algorithms: ["HS256"] });
       valid = true;
     } catch {
       valid = false;

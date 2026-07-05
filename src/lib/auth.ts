@@ -47,7 +47,8 @@ export async function getSession(): Promise<Session | null> {
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, secretKey());
+    // Pin the algorithm — reject any token not signed with HS256.
+    const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
     return { sub: String(payload.sub), username: String(payload.username) };
   } catch {
     return null;

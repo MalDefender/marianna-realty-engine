@@ -20,6 +20,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       "Content-Type": img.mime,
       "Cache-Control": "public, max-age=31536000, immutable",
       "Content-Length": String(bytes.length),
+      // Never let the browser sniff a different type; force inline display.
+      "X-Content-Type-Options": "nosniff",
+      "Content-Disposition": "inline",
     },
   });
 }

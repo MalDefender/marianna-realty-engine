@@ -84,7 +84,20 @@ async function writeJson(data: JsonShape): Promise<void> {
 }
 
 // ---------- Schema init ----------
-export async function initDb(): Promise<void> {
+let _initPromise: Promise<void> | null = null;
+
+// Memoized so schema creation runs once per process, not on every request.
+export function initDb(): Promise<void> {
+  if (!_initPromise) {
+    _initPromise = doInit().catch((e) => {
+      _initPromise = null; // allow retry on failure
+      throw e;
+    });
+  }
+  return _initPromise;
+}
+
+async function doInit(): Promise<void> {
   if (usePg) {
     const p = await pool();
     await p.query(`CREATE TABLE IF NOT EXISTS admins (
