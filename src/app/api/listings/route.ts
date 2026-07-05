@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { listListings, createListing } from "@/lib/db";
 import { requireAdmin, assertSameOrigin } from "@/lib/auth";
 import { listingSchema } from "@/lib/validation";
+import { readJsonLimited } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
   try {
     assertSameOrigin(req);
     await requireAdmin();
-    const body = await req.json().catch(() => null);
+    const body = await readJsonLimited(req);
     const parsed = listingSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(

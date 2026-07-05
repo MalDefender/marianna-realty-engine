@@ -29,3 +29,18 @@ export function clientIp(req: Request): string {
   if (xff) return xff.split(",")[0].trim();
   return req.headers.get("x-real-ip") || "unknown";
 }
+
+/**
+ * Login limiter combining two ceilings:
+ *  - per-IP (8 / 10 min) — normal abuse protection.
+ *  - global (40 / 10 min) — backstop against an attacker rotating/spoofing
+ *    X-Forwarded-For to dodge the per-IP limit.
+ * Returns the stricter result.
+ */
+export function loginRateLimit(ip: string) {
+  const perIp = rateLimit(`login:${ip}`, 8, 10 * 60 * 1000);
+  const global = rateLimit("login:__global__", 40, 10 * 60 * 1000);
+  if (!perIp.ok) return perIp;
+  if (!global.ok) return global;
+  return perIp;
+}

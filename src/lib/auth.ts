@@ -32,7 +32,8 @@ export async function createSession(username: string): Promise<void> {
     .setExpirationTime(`${MAX_AGE}s`)
     .sign(secretKey());
 
-  cookies().set(COOKIE, token, {
+  const jar = await cookies();
+  jar.set(COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -42,7 +43,8 @@ export async function createSession(username: string): Promise<void> {
 }
 
 export async function getSession(): Promise<Session | null> {
-  const token = cookies().get(COOKIE)?.value;
+  const jar = await cookies();
+  const token = jar.get(COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secretKey());
@@ -52,8 +54,9 @@ export async function getSession(): Promise<Session | null> {
   }
 }
 
-export function destroySession(): void {
-  cookies().set(COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+export async function destroySession(): Promise<void> {
+  const jar = await cookies();
+  jar.set(COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
 }
 
 /** Guard for API route handlers. Returns the session or throws a 401 Response. */
@@ -68,26 +71,37 @@ export async function requireAdmin(): Promise<Session> {
   return s;
 }
 
+function forbid(msg: string): never {
+  throw new Response(JSON.stringify({ error: msg }), {
+    status: 403,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+  });
+}
+
 /**
- * Basic CSRF mitigation for state-changing requests: since auth uses a
- * SameSite=Lax cookie, also verify the Origin matches the Host for
- * non-GET requests.
+ * CSRF protection for state-changing requests. Defense in depth on top of the
+ * SameSite=Lax session cookie:
+ *  1. Honor Sec-Fetch-Site — reject cross-site / same-site requests.
+ *  2. Require a valid Origin or Referer whose host matches the request Host.
+ *  Requests that can't be verified are rejected (fail closed).
  */
 export function assertSameOrigin(req: Request): void {
-  const origin = req.headers.get("origin");
-  if (!origin) return; // same-origin navigations may omit Origin
   const host = req.headers.get("host");
-  try {
-    if (new URL(origin).host !== host) {
-      throw new Response(JSON.stringify({ error: "Запрос с чужого источника" }), {
-        status: 403,
-        headers: { "content-type": "application/json" },
-      });
-    }
-  } catch {
-    throw new Response(JSON.stringify({ error: "Некорректный источник" }), {
-      status: 403,
-      headers: { "content-type": "application/json" },
-    });
+  if (!host) forbid("Нет заголовка Host");
+
+  const sfs = req.headers.get("sec-fetch-site");
+  if (sfs && sfs !== "same-origin" && sfs !== "none") {
+    forbid("Запрос с чужого источника");
   }
+
+  const source = req.headers.get("origin") || req.headers.get("referer");
+  if (!source) forbid("Не удалось проверить источник запроса");
+
+  let sourceHost: string;
+  try {
+    sourceHost = new URL(source).host;
+  } catch {
+    forbid("Некорректный источник");
+  }
+  if (sourceHost !== host) forbid("Запрос с чужого источника");
 }

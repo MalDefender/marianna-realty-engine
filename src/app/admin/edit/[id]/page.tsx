@@ -5,9 +5,10 @@ import ListingForm from "../../ListingForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function EditListingPage({ params }: { params: { id: string } }) {
+export default async function EditListingPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   await initDb();
-  const item = await getListing(params.id);
+  const item = await getListing(id);
   if (!item) notFound();
 
   return (

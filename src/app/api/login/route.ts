@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getAdminByUsername } from "@/lib/db";
 import { verifyPassword, createSession, assertSameOrigin } from "@/lib/auth";
 import { loginSchema } from "@/lib/validation";
-import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { loginRateLimit, clientIp } from "@/lib/rateLimit";
+import { readJsonLimited } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,15 +13,15 @@ export async function POST(req: Request) {
     assertSameOrigin(req);
 
     const ip = clientIp(req);
-    const rl = rateLimit(`login:${ip}`, 8, 10 * 60 * 1000);
+    const rl = loginRateLimit(ip);
     if (!rl.ok) {
       return NextResponse.json(
         { error: `Слишком много попыток. Повторите через ${rl.retryAfter} с.` },
-        { status: 429 }
+        { status: 429, headers: { "cache-control": "no-store" } }
       );
     }
 
-    const body = await req.json().catch(() => null);
+    const body = await readJsonLimited(req, 4 * 1024);
     const parsed = loginSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: "Неверные данные" }, { status: 400 });

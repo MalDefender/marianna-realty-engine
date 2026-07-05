@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     assertSameOrigin(req);
-    destroySession();
+    await destroySession();
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof Response) return e;
