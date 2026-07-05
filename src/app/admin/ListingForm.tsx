@@ -49,6 +49,18 @@ export default function ListingForm({ initial, id }: { initial?: Listing; id?: s
     setF((prev) => ({ ...prev, [k]: v }));
   }
 
+  function changeType(type: string) {
+    setF((prev) => ({
+      ...prev,
+      type,
+      // участок — только у дома; этаж — только у квартиры/апартаментов
+      land: type === "Дом" ? prev.land : "",
+      floor: type === "Дом" ? "" : prev.floor,
+    }));
+  }
+
+  const isHouse = f.type === "Дом";
+
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -114,7 +126,7 @@ export default function ListingForm({ initial, id }: { initial?: Listing; id?: s
       <div className="form-grid two">
         <div className="field">
           <label>Тип</label>
-          <select value={f.type} onChange={(e) => up("type", e.target.value)}>
+          <select value={f.type} onChange={(e) => changeType(e.target.value)}>
             {TYPES.map((t) => (
               <option key={t}>{t}</option>
             ))}
@@ -148,14 +160,17 @@ export default function ListingForm({ initial, id }: { initial?: Listing; id?: s
           <label>Площадь, м²</label>
           <input value={f.area} onChange={(e) => up("area", e.target.value)} placeholder="60,7" />
         </div>
-        <div className="field">
-          <label>Этаж</label>
-          <input value={f.floor} onChange={(e) => up("floor", e.target.value)} placeholder="1/8" />
-        </div>
-        <div className="field">
-          <label>Участок (для дома)</label>
-          <input value={f.land} onChange={(e) => up("land", e.target.value)} placeholder="5,9 сот" />
-        </div>
+        {isHouse ? (
+          <div className="field">
+            <label>Участок</label>
+            <input value={f.land} onChange={(e) => up("land", e.target.value)} placeholder="5,9 сот" />
+          </div>
+        ) : (
+          <div className="field">
+            <label>Этаж</label>
+            <input value={f.floor} onChange={(e) => up("floor", e.target.value)} placeholder="1/8" />
+          </div>
+        )}
       </div>
 
       <div className="field" style={{ marginTop: 16 }}>
