@@ -1,6 +1,7 @@
 import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import bcrypt from "bcryptjs";
 
 /**
  * Storage layer with two interchangeable backends:
@@ -97,6 +98,54 @@ export function initDb(): Promise<void> {
   return _initPromise;
 }
 
+// First 11 real Gelendzhik objects — seeded automatically on first boot so the
+// app works out-of-the-box on hosts without shell access (e.g. Render free).
+const SEED_LISTINGS: ListingInput[] = (
+  [
+    ["Квартира", "3-комнатная, 250 м²", 280000000, "Геленджик · побережье", "3", "250", "12/16", ""],
+    ["Дом", "Дом 316 м² с участком", 250000000, "Геленджик", "", "316", "", "5,9 сот"],
+    ["Дом", "Дом 288 м² у моря", 155000000, "Дивноморское", "", "288", "", "26,1 сот"],
+    ["Апартаменты", "Апартаменты 98 м²", 90000000, "Геленджик", "2", "98,3", "2/5", ""],
+    ["Квартира", "2-комнатная, 110 м²", 68000000, "Геленджик", "2", "110,4", "11/12", ""],
+    ["Апартаменты", "Апартаменты 92 м²", 57000000, "Геленджик", "2", "92", "1/5", ""],
+    ["Квартира", "2-комнатная, 106 м²", 46350000, "Геленджик", "2", "106", "3/12", ""],
+    ["Квартира", "2-комнатная, 72 м²", 26700000, "Геленджик", "2", "72", "7/10", ""],
+    ["Квартира", "1-комнатная, 56,9 м²", 24500000, "Геленджик", "1", "56,9", "8/20", ""],
+    ["Апартаменты", "Апартаменты 50,9 м²", 22000000, "Геленджик", "1", "50,9", "8/8", ""],
+    ["Апартаменты", "Апартаменты 60,7 м²", 20500000, "Геленджик", "2", "60,7", "1/8", ""],
+  ] as [string, string, number, string, string, string, string, string][]
+).map((r, i) => ({
+  type: r[0], title: r[1], price: r[2], location: r[3],
+  rooms: r[4], area: r[5], floor: r[6], land: r[7],
+  description: "", photos: [], published: true, sort: i,
+}));
+
+/**
+ * Idempotent bootstrap. Creates the admin from ADMIN_USERNAME/ADMIN_PASSWORD
+ * env vars if no admin exists yet, and seeds the catalog if empty. Runs once
+ * per process (called from the memoized initDb). Safe to leave in place — it
+ * no-ops once an admin exists.
+ */
+async function ensureSeed(): Promise<void> {
+  try {
+    const user = process.env.ADMIN_USERNAME;
+    const pass = process.env.ADMIN_PASSWORD;
+    if (user && pass && pass.length >= 8) {
+      const existing = await getAdminByUsername(user);
+      const count = await countAdmins();
+      if (!existing && count === 0) {
+        await createAdmin(user, await bcrypt.hash(pass, 12));
+      }
+    }
+    const listings = await listListings();
+    if (listings.length === 0) {
+      for (const l of SEED_LISTINGS) await createListing(l);
+    }
+  } catch {
+    // Non-fatal: never block app startup on seeding.
+  }
+}
+
 async function doInit(): Promise<void> {
   if (usePg) {
     const p = await pool();
@@ -117,6 +166,7 @@ async function doInit(): Promise<void> {
   } else {
     await readJson();
   }
+  await ensureSeed();
 }
 
 function rowToListing(r: Record<string, unknown>): Listing {
